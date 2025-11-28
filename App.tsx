@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { LibraryManager } from './pages/LibraryManager';
@@ -38,7 +38,7 @@ const App: React.FC = () => {
   if (!loaded) return null;
 
   return (
-    <HashRouter>
+    <MemoryRouter>
       <Layout>
         <Routes>
           <Route 
@@ -56,7 +56,7 @@ const App: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
-    </HashRouter>
+    </MemoryRouter>
   );
 };
 

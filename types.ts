@@ -14,6 +14,7 @@ export interface DayRecord {
   awakening: boolean; // if balance < 0
   tasksCompleted: number;
   totalCostConsumed: number;
+  completedTaskTitles?: string[]; // List of task titles completed that day
 }
 
 export interface AppState {

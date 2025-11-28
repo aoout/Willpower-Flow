@@ -149,6 +149,11 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
     const finalBalance = todayPoolMax - completedCost;
     const isAwakening = finalBalance < 0;
     
+    // Collect completed task titles for stats
+    const completedTitles = state.todayTasks
+        .filter(t => t.completed && t.type !== 'filler')
+        .map(t => t.title);
+
     // 2. Adjust Base Max
     let newBaseMax = state.baseMax;
     if (finalBalance > 0) {
@@ -163,10 +168,12 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
       finalBalance,
       awakening: isAwakening,
       tasksCompleted: state.todayTasks.filter(t => t.completed).length,
-      totalCostConsumed: completedCost
+      totalCostConsumed: completedCost,
+      completedTaskTitles: completedTitles
     };
 
     // 4. Move incomplete tasks back to backlog? Or archive?
+    // Move normal/template tasks back to backlog if not completed
     const incompleteTasks = state.todayTasks
       .filter(t => !t.completed && t.type !== 'filler')
       .map(t => ({ ...t, type: 'backlog' as const }));
@@ -256,79 +263,73 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
                 <span className="text-xs font-mono text-stone-400 bg-stone-50 px-2 py-1 rounded">
                   {task.cost}
                 </span>
-                {state.phase === 'PLANNING' && (
-                  <button 
-                    onClick={() => removeTask(task.id)}
-                    className="text-stone-200 hover:text-red-400 transition-colors"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
+                
+                <button 
+                  onClick={() => removeTask(task.id)}
+                  className="text-stone-200 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 size={16} />
+                </button>
               </div>
             </div>
           ))}
           <div ref={scrollRef} />
         </div>
 
-        {/* Inputs (Planning Only) */}
-        {state.phase === 'PLANNING' && (
-          <div className="mt-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleAddTask}
-              placeholder="输入任务 20 (回车添加)"
-              className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-sm outline-none focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-all placeholder:text-stone-300"
-              autoFocus
-            />
+        {/* Inputs (Always Available) */}
+        <div className="mt-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={handleAddTask}
+            placeholder="输入任务 20 (回车添加)"
+            className="w-full bg-white border border-stone-200 rounded-lg px-4 py-3 text-sm outline-none focus:border-stone-400 focus:ring-1 focus:ring-stone-400 transition-all placeholder:text-stone-300"
+          />
 
-            {displayRemaining > 0 && (
-              <button
-                onClick={fillRemaining}
-                className="w-full py-3 border border-dashed border-stone-200 text-stone-400 rounded-lg text-xs hover:bg-stone-50 hover:border-stone-300 transition-all flex items-center justify-center gap-2"
-              >
-                <Plus size={14} />
-                一键填充剩余 ({displayRemaining})
-              </button>
-            )}
-          </div>
-        )}
+          {displayRemaining > 0 && (
+            <button
+              onClick={fillRemaining}
+              className="w-full py-3 border border-dashed border-stone-200 text-stone-400 rounded-lg text-xs hover:bg-stone-50 hover:border-stone-300 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus size={14} />
+              一键填充剩余 ({displayRemaining})
+            </button>
+          )}
+        </div>
       </section>
 
-      {/* 4. Mini Task Library (Horizontal Scroll) */}
-      {state.phase === 'PLANNING' && (
-        <section className="px-6 py-4 border-t border-stone-100">
-           <h3 className="text-[10px] font-bold text-stone-300 uppercase tracking-widest mb-3">快速添加</h3>
-           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-              {/* Templates (Pink) */}
-              {state.templates.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => copyFromLibrary(t)}
-                  className="flex-shrink-0 px-3 py-2 bg-pink-50 text-pink-700 border border-pink-100 rounded-md text-xs font-medium whitespace-nowrap hover:bg-pink-100 transition-colors"
-                >
-                  {t.title} <span className="opacity-50 ml-1">{t.cost}</span>
-                </button>
-              ))}
-              
-              {/* Backlog (Blue) */}
-              {state.backlog.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => moveFromBacklog(t)}
-                  className="flex-shrink-0 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-100 rounded-md text-xs font-medium whitespace-nowrap hover:bg-blue-100 transition-colors"
-                >
-                  {t.title} <span className="opacity-50 ml-1">{t.cost}</span>
-                </button>
-              ))}
-              
-              {state.templates.length === 0 && state.backlog.length === 0 && (
-                <span className="text-xs text-stone-300 italic">任务库为空，去配置页添加...</span>
-              )}
-           </div>
-        </section>
-      )}
+      {/* 4. Mini Task Library (Always Available) */}
+      <section className="px-6 py-4 border-t border-stone-100">
+          <h3 className="text-[10px] font-bold text-stone-300 uppercase tracking-widest mb-3">快速添加</h3>
+          <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+            {/* Templates (Pink) */}
+            {state.templates.map(t => (
+              <button
+                key={t.id}
+                onClick={() => copyFromLibrary(t)}
+                className="flex-shrink-0 px-3 py-2 bg-pink-50 text-pink-700 border border-pink-100 rounded-md text-xs font-medium whitespace-nowrap hover:bg-pink-100 transition-colors"
+              >
+                {t.title} <span className="opacity-50 ml-1">{t.cost}</span>
+              </button>
+            ))}
+            
+            {/* Backlog (Blue) */}
+            {state.backlog.map(t => (
+              <button
+                key={t.id}
+                onClick={() => moveFromBacklog(t)}
+                className="flex-shrink-0 px-3 py-2 bg-blue-50 text-blue-700 border border-blue-100 rounded-md text-xs font-medium whitespace-nowrap hover:bg-blue-100 transition-colors"
+              >
+                {t.title} <span className="opacity-50 ml-1">{t.cost}</span>
+              </button>
+            ))}
+            
+            {state.templates.length === 0 && state.backlog.length === 0 && (
+              <span className="text-xs text-stone-300 italic">任务库为空，去配置页添加...</span>
+            )}
+          </div>
+      </section>
 
       {/* 5. Action Footer */}
       <div className="fixed bottom-16 left-0 right-0 max-w-md mx-auto px-6 py-4 pointer-events-none flex justify-between items-end bg-gradient-to-t from-stone-50 via-stone-50/80 to-transparent z-40">
