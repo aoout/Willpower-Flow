@@ -1,6 +1,8 @@
+
 import React, { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { AppState, DayRecord } from '../types';
-import { Battery, Trophy, BookOpen } from 'lucide-react';
+import { Battery, Trophy, BookOpen, Settings } from 'lucide-react';
 
 interface AwarenessProps {
   state: AppState;
@@ -76,9 +78,14 @@ export const Awareness: React.FC<AwarenessProps> = ({ state }) => {
 
   return (
     <div className="min-h-full flex flex-col bg-stone-50 p-6 pb-24">
-      <header className="mb-8">
-        <h1 className="text-xl font-light text-stone-800 tracking-tight">自我觉察</h1>
-        <p className="text-xs text-stone-400 mt-1">你的意志力流动轨迹</p>
+      <header className="mb-8 flex items-start justify-between">
+        <div>
+            <h1 className="text-xl font-light text-stone-800 tracking-tight">自我觉察</h1>
+            <p className="text-xs text-stone-400 mt-1">你的意志力流动轨迹</p>
+        </div>
+        <Link to="/settings" className="text-stone-300 hover:text-stone-500 transition-colors p-1">
+            <Settings size={20} strokeWidth={1.5} />
+        </Link>
       </header>
 
       {/* 1. Current Base Cap */}

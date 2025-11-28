@@ -1,3 +1,4 @@
+
 export interface Task {
   id: string;
   title: string;
@@ -17,9 +18,14 @@ export interface DayRecord {
   completedTaskTitles?: string[]; // List of task titles completed that day
 }
 
+export interface AppSettings {
+  bottomNavOffset: boolean;
+}
+
 export interface AppState {
   // Config
   baseMax: number;
+  settings: AppSettings;
   
   // Daily State
   lastActiveDate: string; // YYYY-MM-DD
@@ -40,6 +46,9 @@ export interface AppState {
 
 export const INITIAL_STATE: AppState = {
   baseMax: 100,
+  settings: {
+    bottomNavOffset: false,
+  },
   lastActiveDate: new Date().toISOString().split('T')[0],
   diaryContent: '',
   diaryAdjustment: 0,

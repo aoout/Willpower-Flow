@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { Home } from './pages/Home';
 import { LibraryManager } from './pages/LibraryManager';
 import { Awareness } from './pages/Awareness';
+import { Settings } from './pages/Settings';
 import { AppState, INITIAL_STATE } from './types';
 import { loadState, saveState } from './services/storage';
 
@@ -39,7 +41,7 @@ const App: React.FC = () => {
 
   return (
     <MemoryRouter>
-      <Layout>
+      <Layout bottomNavOffset={state.settings?.bottomNavOffset}>
         <Routes>
           <Route 
             path="/" 
@@ -52,6 +54,10 @@ const App: React.FC = () => {
           <Route 
             path="/awareness" 
             element={<Awareness state={state} />} 
+          />
+          <Route 
+            path="/settings" 
+            element={<Settings state={state} updateState={updateState} />} 
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
