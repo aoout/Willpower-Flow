@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Plus, Trash2, ArrowRight, RotateCcw, Sunrise, CheckCircle2, Circle } from 'lucide-react';
-import { AppState, Task, DayRecord } from '../types';
+import { Plus, ArrowRight, Sunrise, CalendarClock } from 'lucide-react';
+import { AppState, Task, DayRecord, ScheduledTask } from '../types';
 import { ProgressBar } from '../components/ProgressBar';
+import { TaskItem } from '../components/TaskItem';
 
 interface HomeProps {
   state: AppState;
@@ -13,11 +15,46 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
   const [inputValue, setInputValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // --- Logic: Auto-Inject Scheduled Tasks ---
+  useEffect(() => {
+    // Only run if in Planning phase to avoid disrupting Execution
+    if (state.phase !== 'PLANNING') return;
+
+    const todayDay = new Date().getDay(); // 0-6
+    const tasksToAdd: Task[] = [];
+
+    state.scheduledTasks.forEach(plan => {
+      // 1. Check Specific Days
+      if (plan.config.mode === 'specific_days' && plan.config.days?.includes(todayDay)) {
+        // Check if already exists in todayTasks (by sourceId) or was recently completed?
+        // Simple check: is it in todayTasks?
+        const exists = state.todayTasks.some(t => t.sourceId === plan.id);
+        
+        if (!exists) {
+          tasksToAdd.push({
+            id: uuidv4(),
+            title: plan.title,
+            cost: plan.cost,
+            completed: false,
+            type: 'scheduled',
+            note: plan.note,
+            sourceId: plan.id
+          });
+        }
+      }
+    });
+
+    if (tasksToAdd.length > 0) {
+      updateState({
+        todayTasks: [...state.todayTasks, ...tasksToAdd]
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.scheduledTasks, state.phase]); // Dependency on phase ensures checks happen on new day reset
+
   // --- Logic: Diary Parsing ---
   const handleDiaryChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value;
-    
-    // Extract numbers using regex (integers, positive or negative)
     const matches = text.match(/-?\d+/g);
     const adjustment = matches ? matches.reduce((acc, curr) => acc + parseInt(curr, 10), 0) : 0;
 
@@ -29,13 +66,9 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
 
   // --- Logic: Calculations ---
   const todayPoolMax = state.baseMax + state.diaryAdjustment;
-  
   const allocatedCost = state.todayTasks.reduce((acc, t) => acc + t.cost, 0);
   const completedCost = state.todayTasks.filter(t => t.completed).reduce((acc, t) => acc + t.cost, 0);
 
-  // Display Value Logic
-  // PLANNING: Show Remaining = Max - Allocated
-  // EXECUTION: Show Remaining = Max - Completed
   const displayRemaining = state.phase === 'PLANNING' 
     ? todayPoolMax - allocatedCost 
     : todayPoolMax - completedCost;
@@ -43,18 +76,14 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
   // --- Logic: Task Management ---
   const handleAddTask = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && inputValue.trim()) {
-      // Parse format: "Task Name 20"
-      // Regex: Capture everything before the last number as name, last number as cost
       const match = inputValue.match(/^(.*?)(\d+)$/);
-      
       let title = inputValue;
-      let cost = 5; // Default cost if parsing fails
+      let cost = 5;
 
       if (match) {
         title = match[1].trim();
         cost = parseInt(match[2], 10);
       } else {
-        // Fallback: try to split by space
         const parts = inputValue.split(' ');
         const lastPart = parts[parts.length - 1];
         const maybeCost = parseInt(lastPart);
@@ -64,7 +93,7 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
         }
       }
       
-      if (!title) return; // Guard empty title
+      if (!title) return;
 
       const newTask: Task = {
         id: uuidv4(),
@@ -79,16 +108,15 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
       });
       setInputValue('');
       
-      // Scroll to bottom
       setTimeout(() => {
         scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     }
   };
 
-  const updateTask = (id: string, updates: Partial<Task>) => {
+  const toggleTask = (id: string) => {
     updateState({
-      todayTasks: state.todayTasks.map(t => t.id === id ? { ...t, ...updates } : t)
+      todayTasks: state.todayTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t)
     });
   };
 
@@ -112,55 +140,84 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
     });
   };
 
+  // --- Logic: Swipe Action (Defer Plan) ---
+  const handleSwipeAction = (task: Task) => {
+    // 1. Remove from today
+    const newToday = state.todayTasks.filter(t => t.id !== task.id);
+    
+    // 2. Add to backlog with context
+    const todayStr = new Date().toISOString().split('T')[0];
+    const backlogItem: Task = {
+      ...task,
+      id: uuidv4(),
+      title: `(推迟) ${task.title} - ${todayStr.slice(5)}`, // e.g. (推迟) Gym - 11-28
+      type: 'backlog',
+      completed: false
+    };
+
+    updateState({
+      todayTasks: newToday,
+      backlog: [...state.backlog, backlogItem]
+    });
+  };
+
   // --- Logic: Library Interaction ---
   const copyFromLibrary = (template: Task) => {
     const newTask: Task = {
       ...template,
       id: uuidv4(),
-      completed: false, // Reset completion
-      type: 'normal' // Convert to normal execution task
+      completed: false,
+      type: 'normal'
     };
     updateState({
       todayTasks: [...state.todayTasks, newTask]
     });
   };
 
+  const addScheduledTask = (plan: ScheduledTask) => {
+     // Manually add a frequency task
+     const newTask: Task = {
+         id: uuidv4(),
+         title: plan.title,
+         cost: plan.cost,
+         completed: false,
+         type: 'scheduled',
+         note: plan.note,
+         sourceId: plan.id
+     };
+     updateState({
+         todayTasks: [...state.todayTasks, newTask]
+     });
+  };
+
   const moveFromBacklog = (backlogTask: Task) => {
-    // Add to today
     const newTask: Task = {
       ...backlogTask,
       type: 'normal'
     };
-    
-    // Remove from backlog and add to today
     updateState({
       backlog: state.backlog.filter(t => t.id !== backlogTask.id),
       todayTasks: [...state.todayTasks, newTask]
     });
   };
 
-  // --- Logic: Phase Transition ---
   const startExecution = () => {
     updateState({ phase: 'EXECUTION' });
   };
 
   const handleNewDay = () => {
-    // 1. Calculate stats
     const finalBalance = todayPoolMax - completedCost;
     const isAwakening = finalBalance < 0;
     
-    // Collect completed task titles for stats
     const completedTitles = state.todayTasks
         .filter(t => t.completed && t.type !== 'filler')
         .map(t => t.title);
 
-    // 2. Adjust Base Max
     let newBaseMax = state.baseMax;
     if (finalBalance > 0) {
       newBaseMax = Math.max(40, state.baseMax - 10);
     }
     
-    // 3. Create Record
     const record: DayRecord = {
       date: state.lastActiveDate,
       diary: state.diaryContent,
@@ -172,20 +229,19 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
       completedTaskTitles: completedTitles
     };
 
-    // 4. Move incomplete tasks back to backlog? Or archive?
-    // Move normal/template tasks back to backlog if not completed
     const incompleteTasks = state.todayTasks
-      .filter(t => !t.completed && t.type !== 'filler')
+      .filter(t => !t.completed && t.type !== 'filler' && t.type !== 'scheduled') // Don't move skipped scheduled tasks to backlog automatically, they just disappear or user swiped them
       .map(t => ({ ...t, type: 'backlog' as const }));
 
-    const nextBacklog = [...state.backlog, ...incompleteTasks];
+    // Note: Scheduled tasks that were NOT completed just vanish from "Today", 
+    // waiting for their next schedule or manual add, unless the user swiped them to backlog manually.
 
-    // 5. Reset State
+    const nextBacklog = [...state.backlog, ...incompleteTasks];
     const todayStr = new Date().toISOString().split('T')[0];
     
     updateState({
       baseMax: newBaseMax,
-      lastActiveDate: todayStr, // Update to "now" (which creates the new day context)
+      lastActiveDate: todayStr,
       diaryContent: '',
       diaryAdjustment: 0,
       todayTasks: [],
@@ -197,18 +253,55 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
     alert(isAwakening ? "觉醒时刻！你的意志力超越了极限。" : "新的一天开始了。");
   };
 
-  // --- Render ---
+  // --- Helper: Count frequency completions ---
+  const getFrequencyStats = (planId: string, mode: 'weekly' | 'monthly') => {
+      // Calculate how many times tasks with sourceId === planId were completed in current period
+      // Since History only stores titles (legacy), we match by title for history, 
+      // but for "today" we check sourceId.
+      // Ideally, we should check history by matching Title == plan.title (Assuming titles are unique-ish)
+      
+      const now = new Date();
+      let count = 0;
+      
+      // 1. Check History
+      state.history.forEach(day => {
+          const d = new Date(day.date);
+          let inPeriod = false;
+          
+          if (mode === 'weekly') {
+             // Simple check: within last 7 days? Or same ISO week? 
+             // Let's do last 7 days for simplicity + rolling window
+             const diffTime = Math.abs(now.getTime() - d.getTime());
+             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+             if (diffDays <= 7) inPeriod = true;
+          } else {
+             // Same month
+             if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) inPeriod = true;
+          }
+
+          if (inPeriod && day.completedTaskTitles) {
+             // Find matching titles. 
+             // Note: In real app, better to store ID in history.
+             // We access the plan from the closure if needed, but here we just need count.
+             // We need to look up the plan title from state.scheduledTasks using planId?
+             const plan = state.scheduledTasks.find(p => p.id === planId);
+             if (plan && day.completedTaskTitles.includes(plan.title)) {
+                 count++;
+             }
+          }
+      });
+
+      // 2. Check Today (if completed)
+      const completedToday = state.todayTasks.filter(t => t.completed && t.sourceId === planId).length;
+      
+      return count + completedToday;
+  };
+
   return (
     <div className="min-h-full flex flex-col bg-stone-50 pb-40">
-      
-      {/* 1. Progress Bar (Sticky) */}
-      <ProgressBar 
-        total={todayPoolMax} 
-        current={displayRemaining} 
-        phase={state.phase}
-      />
+      <ProgressBar total={todayPoolMax} current={displayRemaining} phase={state.phase} />
 
-      {/* 2. Diary / Calibration */}
+      {/* Diary */}
       <section className="px-6 py-6 border-b border-stone-100">
         <textarea
           value={state.diaryContent}
@@ -223,60 +316,26 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
         )}
       </section>
 
-      {/* 3. Today's Allocation */}
+      {/* Task List */}
       <section className="flex-1 px-6 py-6 space-y-4">
         <h2 className="text-xs font-bold text-stone-400 uppercase tracking-widest mb-4">
           {state.phase === 'PLANNING' ? '今日分配' : '执行清单'}
         </h2>
 
-        {/* Task List */}
-        <div className="space-y-3">
+        <div className="space-y-1">
           {state.todayTasks.map(task => (
-            <div 
-              key={task.id} 
-              className={`group relative flex items-center justify-between p-3 rounded-lg border transition-all duration-300 ${
-                task.completed 
-                  ? 'bg-stone-100 border-transparent opacity-60' 
-                  : 'bg-white border-stone-100 shadow-sm hover:shadow-md hover:border-stone-200'
-              }`}
-            >
-              <div 
-                className="flex items-center gap-3 flex-1 cursor-pointer"
-                onClick={() => {
-                  if (state.phase === 'EXECUTION') {
-                    updateTask(task.id, { completed: !task.completed });
-                  }
-                }}
-              >
-                {state.phase === 'EXECUTION' && (
-                  <div className={`transition-colors ${task.completed ? 'text-stone-400' : 'text-stone-200 group-hover:text-stone-300'}`}>
-                    {task.completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
-                  </div>
-                )}
-                
-                <span className={`text-sm font-medium ${task.completed ? 'text-stone-400 line-through decoration-stone-300' : 'text-stone-700'}`}>
-                  {task.title}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-mono text-stone-400 bg-stone-50 px-2 py-1 rounded">
-                  {task.cost}
-                </span>
-                
-                <button 
-                  onClick={() => removeTask(task.id)}
-                  className="text-stone-200 hover:text-red-400 transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-            </div>
+            <TaskItem 
+                key={task.id}
+                task={task}
+                phase={state.phase}
+                onToggle={toggleTask}
+                onRemove={removeTask}
+                onSwipeAction={handleSwipeAction}
+            />
           ))}
           <div ref={scrollRef} />
         </div>
 
-        {/* Inputs (Always Available) */}
         <div className="mt-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <input
             type="text"
@@ -299,10 +358,44 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
         </div>
       </section>
 
-      {/* 4. Mini Task Library (Always Available) */}
+      {/* Mini Task Library */}
       <section className="px-6 py-4 border-t border-stone-100">
-          <h3 className="text-[10px] font-bold text-stone-300 uppercase tracking-widest mb-3">快速添加</h3>
+          <h3 className="text-[10px] font-bold text-stone-300 uppercase tracking-widest mb-3">任务库</h3>
           <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+            
+            {/* Frequency Plans (Yellow) */}
+            {state.scheduledTasks
+                .filter(p => p.config.mode !== 'specific_days')
+                .map(p => {
+                    const isWeekly = p.config.mode === 'weekly_frequency';
+                    const currentCount = getFrequencyStats(p.id, isWeekly ? 'weekly' : 'monthly');
+                    const target = p.config.targetCount || 1;
+                    const isDone = currentCount >= target;
+                    
+                    return (
+                        <button
+                            key={p.id}
+                            onClick={() => addScheduledTask(p)}
+                            className={`relative flex-shrink-0 pl-3 pr-8 py-2 border rounded-md text-xs font-medium whitespace-nowrap transition-colors flex flex-col items-start ${
+                                isDone 
+                                ? 'bg-yellow-50 text-yellow-700 border-yellow-200 opacity-60' 
+                                : 'bg-white text-stone-600 border-yellow-200 hover:bg-yellow-50'
+                            }`}
+                        >
+                            <span className="font-bold text-yellow-600">{p.title}</span>
+                            <span className="text-[9px] text-stone-400">{p.cost} WP</span>
+                            
+                            {/* Progress Ring */}
+                            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5">
+                                <span className="text-[9px] font-bold text-yellow-500">
+                                    {currentCount}/{target}
+                                </span>
+                            </div>
+                        </button>
+                    );
+                })
+            }
+
             {/* Templates (Pink) */}
             {state.templates.map(t => (
               <button
@@ -325,13 +418,13 @@ export const Home: React.FC<HomeProps> = ({ state, updateState }) => {
               </button>
             ))}
             
-            {state.templates.length === 0 && state.backlog.length === 0 && (
-              <span className="text-xs text-stone-300 italic">任务库为空，去配置页添加...</span>
+            {state.templates.length === 0 && state.backlog.length === 0 && state.scheduledTasks.length === 0 && (
+              <span className="text-xs text-stone-300 italic">任务库为空...</span>
             )}
           </div>
       </section>
 
-      {/* 5. Action Footer */}
+      {/* Action Footer */}
       <div className="fixed bottom-16 left-0 right-0 max-w-md mx-auto px-6 py-4 pointer-events-none flex justify-between items-end bg-gradient-to-t from-stone-50 via-stone-50/80 to-transparent z-40">
         <button
           onClick={handleNewDay}

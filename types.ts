@@ -4,7 +4,28 @@ export interface Task {
   title: string;
   cost: number;
   completed: boolean;
-  type: 'normal' | 'template' | 'backlog' | 'filler';
+  type: 'normal' | 'template' | 'backlog' | 'filler' | 'scheduled';
+  note?: string;
+  sourceId?: string; // Links back to a ScheduledTask id
+}
+
+export type ScheduleMode = 'specific_days' | 'weekly_frequency' | 'monthly_frequency';
+
+export interface ScheduleConfig {
+  mode: ScheduleMode;
+  // For 'specific_days': 0 = Sunday, 1 = Monday, etc.
+  days?: number[]; 
+  // For frequency
+  targetCount?: number;
+}
+
+export interface ScheduledTask {
+  id: string;
+  title: string;
+  cost: number;
+  note: string;
+  config: ScheduleConfig;
+  created: string; // ISO Date
 }
 
 export interface DayRecord {
@@ -36,6 +57,7 @@ export interface AppState {
   todayTasks: Task[];
   templates: Task[];
   backlog: Task[];
+  scheduledTasks: ScheduledTask[]; // New: The "Plan" objects
   
   // Phase
   phase: 'PLANNING' | 'EXECUTION';
@@ -60,6 +82,7 @@ export const INITIAL_STATE: AppState = {
   backlog: [
     { id: 'b1', title: '整理桌面', cost: 5, completed: false, type: 'backlog' },
   ],
+  scheduledTasks: [],
   phase: 'PLANNING',
   history: [],
 };
