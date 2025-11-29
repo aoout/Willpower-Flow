@@ -23,3 +23,24 @@ export const saveState = (state: AppState) => {
     console.error("Failed to save state", e);
   }
 };
+
+export const importAndSaveData = (jsonString: string): { success: boolean; message?: string } => {
+  try {
+    const parsed = JSON.parse(jsonString);
+
+    // Simple validation: check for critical keys or object type
+    if (!parsed || typeof parsed !== 'object') {
+      return { success: false, message: 'Invalid JSON format' };
+    }
+
+    // Merge imported data with INITIAL_STATE to ensure structure integrity
+    // This allows importing older backups into newer versions of the app
+    const newState = { ...INITIAL_STATE, ...parsed };
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+    return { success: true };
+  } catch (e) {
+    console.error("Import failed", e);
+    return { success: false, message: 'Failed to parse JSON file' };
+  }
+};
