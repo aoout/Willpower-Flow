@@ -147,7 +147,7 @@ export const Settings: React.FC<SettingsProps> = ({ state, updateState }) => {
         <div className="mt-3 flex gap-2 px-2">
             <AlertCircle size={14} className="text-stone-400 shrink-0 mt-0.5" />
             <p className="text-[10px] text-stone-400 leading-relaxed">
-                导入数据将完全覆盖当前的记录，建议先导出当前数据作为备份。完成后页面将自动刷新。
+                导入数据将完全覆盖当前的记录，建议先导出当前数据作为备份。完成后需手动刷新页面。
             </p>
         </div>
       </section>
